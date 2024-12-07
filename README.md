@@ -8,8 +8,6 @@ This project is part of a Master's degree in Design and Multimedia for the Compu
 - **Digital Reflection:** Generates 3D objects in a Unity scene that form a dynamic digital reflection tracking body movements.
 - **Body Tracking:** Utilizes Python and MediaPipe with a standard webcam.
 
-### Technology Stack
-- **Unity + Python:** Implements the Google MediaPipe integration for body tracking. This implementation is based on an open-source project by [Ganesh Sar](https://github.com/ganeshsar/UnityPythonMediaPipeAvatar).
 
 ### Demo Video
 [![Example Video](https://img.youtube.com/vi/L1JSLO5pwMg/0.jpg)](https://www.youtube.com/watch?v=L1JSLO5pwMg){:target="_blank"}
