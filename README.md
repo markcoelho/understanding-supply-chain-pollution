@@ -10,7 +10,10 @@ This project is part of a Master's degree in Design and Multimedia for the Compu
 
 
 ### Demo Video
-[![Example Video](https://img.youtube.com/vi/L1JSLO5pwMg/0.jpg)](https://www.youtube.com/watch?v=L1JSLO5pwMg){:target="_blank"}
+<a href="https://www.youtube.com/watch?v=L1JSLO5pwMg" target="_blank">
+  <img src="https://img.youtube.com/vi/L1JSLO5pwMg/0.jpg" alt="Example Video">
+</a>
+
 
 ---
 
