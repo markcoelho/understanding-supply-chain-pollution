@@ -1,5 +1,7 @@
 # Understanding Supply Chain Pollution
 
+article: https://github.com/user-attachments/files/18068923/Understanding_Supply_Chain_Pollution_Marcelo_Coelho.pdf
+
 ## Overview
 This project is part of a Master's degree in Design and Multimedia for the Computational Design Lab at the University of Coimbra. It explores the environmental footprint of consumption habits through an interactive experience.
 
