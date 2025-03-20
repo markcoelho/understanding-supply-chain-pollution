@@ -7,13 +7,18 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
-/* Currently very messy because both the server code and hand-drawn code is all in the same file here.
- * But it is still fairly straightforward to use as a reference/base.
- */
 
 [DefaultExecutionOrder(-1)]
 public class PipeServer : MonoBehaviour
 {
+    // Public variable to store the normalized user position
+    public float userPositionX = 0.5f; // Normalized X position (0 to 1)
+    public float userPositionY = 0.5f; // Normalized Y position (0 to 1)
+    public bool userInFrame = false;
+
+    // Lock for thread-safe access to userPositionX, userPositionY, and userInFrame
+    private readonly object positionLock = new object();
+
     public bool useLegacyPipes = false; // True to use NamedPipes for interprocess communication (not supported on Linux)
     public string host = "127.0.0.1"; // This machines host.
     public int port = 52733; // Must match the Python side.
@@ -42,7 +47,7 @@ public class PipeServer : MonoBehaviour
 
     public Transform GetLandmark(Landmark mark)
     {
-        return body.instances[(int)mark].transform ;
+        return body.instances[(int)mark].transform;
     }
     public Transform GetVirtualNeck()
     {
@@ -57,7 +62,7 @@ public class PipeServer : MonoBehaviour
     {
         System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 
-        body = new Body(bodyParent,landmarkPrefab,linePrefab,landmarkScale,enableHead?headPrefab:null);
+        body = new Body(bodyParent, landmarkPrefab, linePrefab, landmarkScale, enableHead ? headPrefab : null);
         virtualNeck = new GameObject("VirtualNeck").transform;
         virtualHip = new GameObject("VirtualHip").transform;
 
@@ -75,16 +80,16 @@ public class PipeServer : MonoBehaviour
         {
             if (b.positionsBuffer[i].accumulatedValuesCount < samplesForPose)
                 continue;
-            
+
             b.localPositionTargets[i] = b.positionsBuffer[i].value / (float)b.positionsBuffer[i].accumulatedValuesCount * multiplier;
-            b.positionsBuffer[i] = new AccumulatedBuffer(Vector3.zero,0);
+            b.positionsBuffer[i] = new AccumulatedBuffer(Vector3.zero, 0);
         }
 
         Vector3 offset = Vector3.zero;
         for (int i = 0; i < LANDMARK_COUNT; ++i)
         {
-            Vector3 p = b.localPositionTargets[i]-offset;
-            b.instances[i].transform.localPosition=Vector3.MoveTowards(b.instances[i].transform.localPosition, p, Time.deltaTime * maxSpeed);
+            Vector3 p = b.localPositionTargets[i] - offset;
+            b.instances[i].transform.localPosition = Vector3.MoveTowards(b.instances[i].transform.localPosition, p, Time.deltaTime * maxSpeed);
         }
 
         virtualNeck.transform.position = (b.instances[(int)Landmark.RIGHT_SHOULDER].transform.position + b.instances[(int)Landmark.LEFT_SHOULDER].transform.position) / 2f;
@@ -98,70 +103,127 @@ public class PipeServer : MonoBehaviour
     }
 
     private void Run()
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+
+            if (useLegacyPipes)
+            {
+                // Open the named pipe.
+                serverNP = new NamedPipeServerStream("UnityMediaPipeBody1", PipeDirection.InOut, 99, PipeTransmissionMode.Message);
+
+                print("Waiting for connection...");
+                serverNP.WaitForConnection();
+
+                print("Connected.");
+                reader = new BinaryReader(serverNP, Encoding.UTF8);
+            }
+            else
+            {
+                server = new ServerUDP(host, port);
+                server.Connect();
+                server.StartListeningAsync();
+                print("Listening @" + host + ":" + port);
+            }
+
+            while (true)
+            {
+                try
+                {
+                    Body h = body;
+                    var len = 0;
+                    var str = "";
+
+                    if (useLegacyPipes)
+                    {
+                        len = (int)reader.ReadUInt32();
+                        str = new string(reader.ReadChars(len));
+                    }
+                    else
+                    {
+                        if (server.HasMessage())
+                            str = server.GetMessage();
+                        len = str.Length;
+                    }
+
+                    string[] lines = str.Split('\n');
+                    foreach (string l in lines)
+                    {
+                        if (string.IsNullOrWhiteSpace(l))
+                            continue;
+
+                        // Check if the line contains the user position
+                        if (l.StartsWith("user_position|"))
+                        {
+                            // Extract the normalized position value
+                            string[] parts = l.Split('|');
+                            if (parts.Length >= 3 && float.TryParse(parts[1], out float x) && float.TryParse(parts[2], out float y))
+                            {
+                                // Update the public variables in a thread-safe manner
+                                lock (positionLock)
+                                {
+                                    userPositionX = x;
+                                    userPositionY = y;
+                                }
+                            }
+                            continue; // Skip further processing for this line
+                        }
+
+                        // Check if the line contains the user_in_frame variable
+                        if (l.StartsWith("user_in_frame|"))
+                        {
+                            // Extract the user_in_frame value
+                            string[] parts = l.Split('|');
+                            if (parts.Length >= 2 && int.TryParse(parts[1], out int inFrame))
+                            {
+                                // Update the userInFrame variable in a thread-safe manner
+                                lock (positionLock)
+                                {
+                                    userInFrame = inFrame == 1;
+                                }
+
+                                // Write to console if user is in frame or not
+                                //Debug.Log(userInFrame ? "User is in frame" : "User is not in frame");
+                            }
+                            continue; // Skip further processing for this line
+                        }
+
+                        // Process landmark data as before
+                        string[] s = l.Split('|');
+                        if (s.Length < 4) continue;
+                        int i;
+                        if (!int.TryParse(s[0], out i)) continue;
+                        h.positionsBuffer[i].value += new Vector3(float.Parse(s[1]), float.Parse(s[2]), float.Parse(s[3]));
+                        h.positionsBuffer[i].accumulatedValuesCount += 1;
+                        h.active = true;
+                    }
+                }
+                catch (EndOfStreamException)
+                {
+                    print("Client Disconnected");
+                    break;
+                }
+            }
+        }
+
+        // Public method to safely read whether the user is in the frame
+        public bool GetUserInFrame()
+        {
+            lock (positionLock)
+            {
+                //Debug.Log("GetUserInFrame: " + userInFrame);
+                return userInFrame;
+            }
+        }
+
+    // Public method to safely read the user position
+    public Vector2 GetUserPosition()
     {
-        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
-
-        if (useLegacyPipes)
+        lock (positionLock)
         {
-            // Open the named pipe.
-            serverNP = new NamedPipeServerStream("UnityMediaPipeBody1", PipeDirection.InOut, 99, PipeTransmissionMode.Message);
-
-            print("Waiting for connection...");
-            serverNP.WaitForConnection();
-
-            print("Connected.");
-            reader = new BinaryReader(serverNP, Encoding.UTF8);
+            return new Vector2(userPositionX, userPositionY);
         }
-        else
-        {
-            server = new ServerUDP(host, port);
-            server.Connect();
-            server.StartListeningAsync();
-            print("Listening @"+host+":"+port);
-        }
-
-        while (true)
-        {
-            try
-            {
-                Body h = body;
-                var len = 0;
-                var str = "";
-
-                if (useLegacyPipes)
-                {
-                    len = (int)reader.ReadUInt32();
-                    str = new string(reader.ReadChars(len));
-                }
-                else
-                {
-                    if(server.HasMessage())
-                        str = server.GetMessage();
-                    len = str.Length;
-                }
-
-                string[] lines = str.Split('\n');
-                foreach (string l in lines)
-                {
-                    if (string.IsNullOrWhiteSpace(l))
-                        continue;
-                    string[] s = l.Split('|');
-                    if (s.Length < 4) continue;
-                    int i;
-                    if (!int.TryParse(s[0], out i)) continue;
-                    h.positionsBuffer[i].value += new Vector3(float.Parse(s[1]), float.Parse(s[2]), float.Parse(s[3]));
-                    h.positionsBuffer[i].accumulatedValuesCount += 1;
-                    h.active = true;
-                }
-            }
-            catch (EndOfStreamException)
-            {
-                print("Client Disconnected");
-                break;
-            }
-        }
-
     }
+
 
     private void OnDisable()
     {
@@ -290,7 +352,7 @@ public class PipeServer : MonoBehaviour
             lines[10].SetPosition(4, Position((Landmark)7));
         }
 
-        public Vector3 Direction(Landmark from,Landmark to)
+        public Vector3 Direction(Landmark from, Landmark to)
         {
             return (instances[(int)to].transform.position - instances[(int)from].transform.position).normalized;
         }

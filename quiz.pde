@@ -58,9 +58,9 @@ void saveAnswerToFile(int questionNumber, int answerNumber) {
     BufferedWriter writer = null;
     try {
         //file fora da build \/
-        //File file = new File(sketchPath("unity project/Assets/StreamingAssets/quiz/answer.txt"));
+        File file = new File(sketchPath("unity project/Assets/StreamingAssets/quiz/answer.txt"));
         //file na build \/
-        File file = new File(sketchPath("digital mirror_Data/StreamingAssets/quiz/answer.txt"));
+        //File file = new File(sketchPath("digital mirror_Data/StreamingAssets/quiz/answer.txt"));
         
         writer = new BufferedWriter(new FileWriter(file, false)); // Override mode to delete previous content
 
@@ -175,9 +175,9 @@ void clearAnswerFile() {
     BufferedWriter writer = null;
     try {
         //file fora da build \/
-        //File file = new File(sketchPath("unity project/Assets/StreamingAssets/quiz/answer.txt"));
+        File file = new File(sketchPath("unity project/Assets/StreamingAssets/quiz/answer.txt"));
         //file na build \/
-        File file = new File(sketchPath("digital mirror_Data/StreamingAssets/quiz/answer.txt"));
+        //File file = new File(sketchPath("digital mirror_Data/StreamingAssets/quiz/answer.txt"));
         
         writer = new BufferedWriter(new FileWriter(file, false)); // Override mode to delete previous content
         writer.write(""); // Escrever uma string vazia para limpar o arquivo
